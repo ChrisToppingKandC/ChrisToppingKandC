@@ -1,0 +1,13 @@
+{
+    "sap_hr.vw_fact_absence_all": ["staff_number", "absence_date"],
+    "load.High_Court_Appeals": ["AppRefNo"],
+    "live.dim_HR_work_contract": ["dim_work_contract_key"],
+    "live.dim_HR_cost_centre": ["dim_cost_centre_key"],
+    "load.SAP_HR_Leavers": ["Pers#No#", "Leaving"],
+    "sap_hr.vw_fact_sickness": ["Staff Number"],
+    "Live.dim_HR_Gender": ["dim_gender_key"],
+    "Live.dim_HR_Organisation_Unit": ["dim_organisation_key"],
+    "Live.dim_HR_personnel_area": ["dim_personnel_area_key"],
+    "Live.dim_HR_Personnel_SubArea": ["dim_personnel_subarea_key"],
+    "ims.v_master_data_map": ["master_data_map_id"]
+}

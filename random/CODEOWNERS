@@ -1,0 +1,16 @@
+# Specify file types
+
+*.sql                   @Planning-Inspectorate/pins-dataengineers
+*.tf                    @Planning-Inspectorate/pins-infra-reviewers (nasir, alex)
+*.tfvars                @Planning-Inspectorate/pins-infra-reviewers
+*.hcl                   @Planning-Inspectorate/pins-infra-reviewers
+
+# Or use folders
+
+/docs/                  @Planning-Inspectorate/pins-admin
+/infrastructure/        @Planning-Inspectorate/pins-infra-reviewers
+/logicapp/              @Planning-Inspectorate/pins-infra-reviewers
+/pipelines/             @Planning-Inspectorate/pins-infra-reviewers
+/servicebus/            @Planning-Inspectorate/pins-infra-reviewers
+/tests/                 @Planning-Inspectorate/pins-infra-reviewers
+/workspace/             @Planning-Inspectorate/pins-infra-reviewers

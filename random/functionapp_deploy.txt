@@ -1,0 +1,1 @@
+az functionapp deploy --src-path "C:\Users\ChrisTopping\Downloads\functions.zip" --resource-group pins-rg-function-app-odw-dev-uks --subscription ff442a29-fc06-4a13-8e3e-65fd5da513b3 --clean true --name pins-fnapp01-odw-dev-uks --type zip

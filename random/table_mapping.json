@@ -1,0 +1,13 @@
+{
+    "sap_hr.vw_fact_absence_all": "vw_mipins_fact_absence_all",
+    "load.High_Court_Appeals": "vw_mipins_high_court",
+    "live.dim_HR_work_contract": "vw_mipins_hr_contract",
+    "live.dim_HR_cost_centre": "vw_mipins_hr_cost_centre",
+    "load.SAP_HR_Leavers": "vw_mipins_hr_employee_leavers",
+    "sap_hr.vw_fact_sickness": "vw_mipins_hr_fact_sickness",
+    "Live.dim_HR_Gender": "vw_mipins_hr_gender",
+    "Live.dim_HR_Organisation_Unit": "vw_mipins_hr_organisational_unit",
+    "Live.dim_HR_personnel_area": "vw_mipins_hr_personnel_area",
+    "Live.dim_HR_Personnel_SubArea": "vw_mipins_hr_personnel_sub_area",
+    "ims.v_master_data_map": "vw_mipins_IMS_MasterDataMap"
+}

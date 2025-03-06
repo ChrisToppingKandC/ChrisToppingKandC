@@ -1,0 +1,564 @@
+{
+	"name": "py_service_bus_json_to_csv",
+	"properties": {
+		"folder": {
+			"name": "1-odw-raw-to-standardised"
+		},
+		"nbformat": 4,
+		"nbformat_minor": 2,
+		"bigDataPool": {
+			"referenceName": "pinssynspodw",
+			"type": "BigDataPoolReference"
+		},
+		"sessionProperties": {
+			"driverMemory": "28g",
+			"driverCores": 4,
+			"executorMemory": "28g",
+			"executorCores": 4,
+			"numExecutors": 2,
+			"conf": {
+				"spark.dynamicAllocation.enabled": "false",
+				"spark.dynamicAllocation.minExecutors": "2",
+				"spark.dynamicAllocation.maxExecutors": "2",
+				"spark.autotune.trackingId": "c6cf9309-47e2-4f64-aeb4-8fccfe5b453e"
+			}
+		},
+		"metadata": {
+			"saveOutput": true,
+			"enableDebugMode": false,
+			"kernelspec": {
+				"name": "synapse_pyspark",
+				"display_name": "Synapse PySpark"
+			},
+			"language_info": {
+				"name": "python"
+			},
+			"a365ComputeOptions": {
+				"id": "/subscriptions/ff442a29-fc06-4a13-8e3e-65fd5da513b3/resourceGroups/pins-rg-data-odw-dev-uks/providers/Microsoft.Synapse/workspaces/pins-synw-odw-dev-uks/bigDataPools/pinssynspodw",
+				"name": "pinssynspodw",
+				"type": "Spark",
+				"endpoint": "https://pins-synw-odw-dev-uks.dev.azuresynapse.net/livyApi/versions/2019-11-01-preview/sparkPools/pinssynspodw",
+				"auth": {
+					"type": "AAD",
+					"authResource": "https://dev.azuresynapse.net"
+				},
+				"sparkVersion": "3.3",
+				"nodeCount": 3,
+				"cores": 4,
+				"memory": 28,
+				"automaticScaleJobs": false
+			},
+			"sessionKeepAliveTimeout": 30
+		},
+		"cells": [
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# Converts JSON files received from Service Bus to a CSV"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"snoop is a useful debugging tool when calling functions. Useful when running manually and developing.  \r\n",
+					"Decorate each function with @snoop before calling it."
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# %pip install -q -U snoop"
+				],
+				"execution_count": null
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## Set the notebook parameters\r\n",
+					"\r\n",
+					"These are set by pipelines calling this notebook so they are normally set to empty strings ''. Hardcode values if you want to run this manually."
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					},
+					"tags": [
+						"parameters"
+					]
+				},
+				"source": [
+					"source_folder='ServiceBus'\n",
+					"date_folder = ''\n",
+					"source_frequency_folder=''"
+				],
+				"execution_count": 301
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## Imports"
+				]
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"from pyspark.sql import SparkSession\n",
+					"from pyspark.sql.functions import *\n",
+					"from pyspark.sql.types import *\n",
+					"from pyspark.sql.utils import AnalysisException\n",
+					"from pyspark.sql import DataFrame\n",
+					"from notebookutils import mssparkutils\n",
+					"import json\n",
+					"import calendar\n",
+					"from datetime import datetime, timedelta, date\n",
+					"import pandas as pd\n",
+					"import os\n",
+					"import pprint\n",
+					"# import snoop\n",
+					"from functools import reduce"
+				],
+				"execution_count": null
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## Create spark session and set variables"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"spark = SparkSession.builder.getOrCreate()\r\n",
+					"storage_account=mssparkutils.notebook.run('/utils/py_utils_get_storage_account')\r\n",
+					"raw_container = \"abfss://odw-raw@\" + storage_account\r\n",
+					"source_path = f\"{raw_container}{source_folder}/{source_frequency_folder}/{date_folder}\"\r\n",
+					"date_format = datetime.now().date().strftime('%Y-%m-%d')"
+				],
+				"execution_count": null
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## Read the json file(s) into a spark dataframe  \r\n",
+					"\r\n",
+					"Currently only deals with one file being in the date folder. Needs amending to deal with the possibility of multiple files in the same date folder."
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# @snoop\r\n",
+					"def read_json(raw_container: str, source_folder: str, source_frequency_folder: str, date_folder: str, source_path: str) -> DataFrame:\r\n",
+					"    \"\"\"\r\n",
+					"    Function to read a json raw file into a spark dataframe\r\n",
+					"\r\n",
+					"    Returns:\r\n",
+					"        Spark dataframe\r\n",
+					"    \"\"\"\r\n",
+					"    if date_folder == '':    \r\n",
+					"        date_folder = date_format\r\n",
+					"\r\n",
+					"    try:\r\n",
+					"        file_list = mssparkutils.fs.ls(source_path)\r\n",
+					"        files = [file for file in file_list if file.name.endswith('.json')]\r\n",
+					"\r\n",
+					"    except Exception as e:\r\n",
+					"        print(\"No new data\")\r\n",
+					"        mssparkutils.notebook.exit(False)\r\n",
+					"\r\n",
+					"    for file in files:\r\n",
+					"        print(f\"Processing: {file.name}\")\r\n",
+					"        df = spark.read.json(file.path)\r\n",
+					"\r\n",
+					"    return df"
+				],
+				"execution_count": null
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					},
+					"collapsed": false
+				},
+				"source": [
+					"original_dataframe = read_json(raw_container, source_folder, source_frequency_folder, date_folder, source_path)"
+				],
+				"execution_count": null
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## Traverse the spark dataframe schema and extract the different column types"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# @snoop\r\n",
+					"def extract_columns(schema: DataFrame.schema) -> tuple:\r\n",
+					"    \"\"\"\r\n",
+					"    Extracts the different column types from the original dataframe schema\r\n",
+					"\r\n",
+					"    Returns:\r\n",
+					"        A tuple of lists of columns based on type:\r\n",
+					"\r\n",
+					"            all_root_columns,\r\n",
+					"            root_array_columns,\r\n",
+					"            root_non_array_columns,\r\n",
+					"            nested_array_columns,\r\n",
+					"            nested_array,\r\n",
+					"            all_columns,\r\n",
+					"            dataframe_columns,\r\n",
+					"            nested_array_alias\r\n",
+					"    \"\"\"\r\n",
+					"    all_root_columns = original_dataframe.schema.names\r\n",
+					"    root_array_columns = [column.name for column in original_dataframe.schema if isinstance(column.dataType, ArrayType)]\r\n",
+					"    root_non_array_columns = [column for column in all_root_columns if column not in root_array_columns]\r\n",
+					"    \r\n",
+					"    if source_frequency_folder == \"nsip-exam-timetable\":\r\n",
+					"\r\n",
+					"        nested_array_columns = [\r\n",
+					"            f\"{root_array_columns[0]}.{field.name}\" \r\n",
+					"            for column in original_dataframe.schema \r\n",
+					"            if isinstance(column.dataType, ArrayType)\r\n",
+					"            for field in column.dataType.elementType.fields\r\n",
+					"        ]\r\n",
+					"\r\n",
+					"        nested_array = next(\r\n",
+					"        (f\"{root_array_columns[0]}.{field.name}\" for column in original_dataframe.schema if isinstance(column.dataType, ArrayType)\r\n",
+					"        for field in column.dataType.elementType.fields\r\n",
+					"        if isinstance(field.dataType, ArrayType)),\r\n",
+					"        None\r\n",
+					"    )\r\n",
+					"\r\n",
+					"        nested_array_alias = nested_array.rsplit(\".\")[1]\r\n",
+					"\r\n",
+					"    else:\r\n",
+					"        nested_array_columns = []\r\n",
+					"        nested_array = None\r\n",
+					"        nested_array_alias = None\r\n",
+					"\r\n",
+					"    all_columns = root_non_array_columns + nested_array_columns\r\n",
+					"    dataframe_columns = [col for col in all_columns if col != nested_array]\r\n",
+					"\r\n",
+					"    return (\r\n",
+					"        all_root_columns,\r\n",
+					"        root_array_columns,\r\n",
+					"        root_non_array_columns,\r\n",
+					"        nested_array_columns,\r\n",
+					"        nested_array,\r\n",
+					"        all_columns,\r\n",
+					"        dataframe_columns,\r\n",
+					"        nested_array_alias\r\n",
+					"        )"
+				],
+				"execution_count": null
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"all_root_columns, \\\r\n",
+					"root_array_columns, \\\r\n",
+					"root_non_array_columns, \\\r\n",
+					"nested_array_columns, \\\r\n",
+					"nested_array, \\\r\n",
+					"all_columns, \\\r\n",
+					"dataframe_columns, \\\r\n",
+					"nested_array_alias = extract_columns(original_dataframe.schema)"
+				],
+				"execution_count": null
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## Create a flattened dataframe from the original dataframe\r\n",
+					"\r\n",
+					"nsip-exam-timetable is currently an exception as it has a nested array so that is dealt with separately.\r\n",
+					"\r\n",
+					"For other entities, the function loops through the array columns, explodes them (1 row per array value) and adds the dataframe to a list of dataframes (1 per array column).\r\n",
+					"These are then joined together with all the non-array columns to create the flattened dataframe."
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# @snoop\r\n",
+					"def create_flat_dataframe(original_dataframe: DataFrame) -> DataFrame:\r\n",
+					"    \"\"\"\r\n",
+					"    Flattens the spark dataframe if it contains arrays\r\n",
+					"\r\n",
+					"    Returns:\r\n",
+					"        flattened spark dataframe\r\n",
+					"    \"\"\"\r\n",
+					"\r\n",
+					"    flattened_df = None\r\n",
+					"\r\n",
+					"    if source_frequency_folder == \"nsip-exam-timetable\":\r\n",
+					"        select_expr = [col for col in root_non_array_columns]\r\n",
+					"        for array_col in root_array_columns:\r\n",
+					"            select_expr.append(f\"explode_outer({array_col}) as {array_col}\")\r\n",
+					"\r\n",
+					"        exploded_df = original_dataframe.selectExpr(*select_expr)\r\n",
+					"        flattened_df = exploded_df.select(*dataframe_columns, explode_outer(f\"{nested_array}\").alias(f\"{nested_array_alias}\"))\r\n",
+					"        \r\n",
+					"    else:\r\n",
+					"        non_array_cols_expr = [original_dataframe[col] for col in root_non_array_columns]\r\n",
+					"        exploded_dfs = []\r\n",
+					"        for array_col in root_array_columns:\r\n",
+					"            exploded_df = original_dataframe.select(*non_array_cols_expr, explode_outer(array_col).alias(array_col))\r\n",
+					"            exploded_dfs.append(exploded_df)\r\n",
+					"\r\n",
+					"        if exploded_dfs:\r\n",
+					"            flattened_df = exploded_dfs[0]\r\n",
+					"            for df in exploded_dfs[1:]:\r\n",
+					"                flattened_df = flattened_df.join(df, on=root_non_array_columns, how='outer')\r\n",
+					"\r\n",
+					"            flattened_df = flattened_df.distinct()\r\n",
+					"\r\n",
+					"        else:\r\n",
+					"            flattened_df = original_dataframe\r\n",
+					"\r\n",
+					"    return flattened_df"
+				],
+				"execution_count": null
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"flattened_df = create_flat_dataframe(original_dataframe)"
+				],
+				"execution_count": null
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## Write the data in a CSV file"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"def write_to_csv(flattened_df: DataFrame) -> None:\n",
+					"    \"\"\"\n",
+					"    Write spark dataframe to a csv file for further processing\n",
+					"\n",
+					"    Returns:\n",
+					"        Notebook exit value of True if successful\n",
+					"    \"\"\"\n",
+					"    output_folder_path = f\"{source_path}/output.csv/\"\n",
+					"    final_output_file_path = f\"{source_path}/{source_frequency_folder}.csv\"\n",
+					"\n",
+					"    try:\n",
+					"        flattened_df.repartition(1).write.mode('overwrite').option(\"header\",True).csv(output_folder_path)\n",
+					"\n",
+					"        files = mssparkutils.fs.ls(output_folder_path)\n",
+					"        output_files = [f for f in files if f.name.endswith('.csv')]\n",
+					"\n",
+					"        if len(output_files) == 0:\n",
+					"            mssparkutils.notebook.exit(False)\n",
+					"\n",
+					"        output_file = output_files[0]\n",
+					"        try:\n",
+					"            mssparkutils.fs.rm(final_output_file_path, True)\n",
+					"        except Exception as e:\n",
+					"            print(f\"File does not exist already. Continuing conversion.\")\n",
+					"        mssparkutils.fs.mv(output_file.path, final_output_file_path, True)\n",
+					"        mssparkutils.fs.rm(output_folder_path, True)\n",
+					"        \n",
+					"    except Exception as e:\n",
+					"        print(f\"An error occurred while writing to CSV: {str(e)}\")\n",
+					"        mssparkutils.notebook.exit(False)\n",
+					"\n",
+					"    mssparkutils.notebook.exit(True)"
+				],
+				"execution_count": null
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"write_to_csv(flattened_df)"
+				],
+				"execution_count": null
+			}
+		]
+	}
+}
